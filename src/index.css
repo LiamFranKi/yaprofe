@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Icono del selector nativo de <input type="date">: visible en fondos oscuros */
+.date-input-themed::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+}
+html.dark .date-input-themed::-webkit-calendar-picker-indicator,
+.dark .date-input-themed::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 1;
+}
+
+/* Editor enriquecido (react-quill) — modo oscuro */
+.dark .rich-text .ql-toolbar.ql-snow {
+  @apply border-gray-700 bg-gray-800;
+}
+.dark .rich-text .ql-toolbar .ql-stroke {
+  stroke: #9ca3af;
+}
+.dark .rich-text .ql-toolbar .ql-fill {
+  fill: #9ca3af;
+}
+.dark .rich-text .ql-toolbar button:hover .ql-stroke,
+.dark .rich-text .ql-toolbar .ql-picker-label:hover {
+  @apply text-gray-200;
+}
+.dark .rich-text .ql-container.ql-snow {
+  @apply border-gray-700 bg-gray-900 text-gray-100;
+}
+.dark .rich-text .ql-editor.ql-blank::before {
+  color: #6b7280;
+}

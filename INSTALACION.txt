@@ -1,0 +1,50 @@
+YaProFe — Pasos de instalación local (Windows)
+============================================
+
+1) MySQL
+   - Instala MySQL 8+ o XAMPP (incluye MySQL).
+   - Asegúrate de que el servicio MySQL esté en ejecución.
+
+2) Base de datos
+   Opción A — script automático (si mysql.exe está en PATH o en XAMPP):
+     npm run db:setup
+
+   Opción B — manual:
+     Abre MySQL Workbench / HeidiSQL, conecta a localhost y ejecuta el archivo:
+       mysql/schema.sql
+
+   Opción C — línea de comandos (ajusta la ruta a mysql.exe):
+     "C:\xampp\mysql\bin\mysql.exe" -u root -p < mysql\schema.sql
+
+3) Archivo .env (en la raíz del proyecto)
+   - MYSQL_USER, MYSQL_PASSWORD y MYSQL_DATABASE deben coincidir con tu MySQL.
+   - Por defecto el esquema usa la base: yaprofebolt
+   - JWT_SECRET: ya tiene un valor generado; no lo compartas ni lo subas a git.
+
+4) Arrancar la aplicación  (IMPORTANTE)
+     npm install
+     npm run dev
+
+   Debe ejecutarse "npm run dev" (sin :web solo). Eso levanta A LA VEZ:
+   - API Node:  http://localhost:4000  (prueba http://localhost:4000/api/health)
+   - Web Vite:  http://localhost:5173
+
+   Si solo ejecutas "npm run dev:web" o solo "vite", NO habrá API en 4000 y el
+   registro/login fallará (error 500 o de red).
+
+   Comprueba la base de datos: abre en el navegador
+     http://localhost:4000/api/health
+   Debe decir "database": "conectado". Si dice error, revisa MYSQL_PASSWORD en .env.
+
+5) Primer usuario administrador
+   - Regístrate en la web (comprador o vendedor).
+   - En MySQL ejecuta (sustituye el UUID por el id de tu usuario en la tabla profiles):
+     UPDATE profiles SET role = 'admin' WHERE id = 'PEGAR-AQUI-TU-UUID';
+
+6) Subida de archivos
+   - Se guardan en la carpeta uploads/ (creada al iniciar el servidor).
+
+7) Producción
+   - Compilar front: npm run build
+   - Servir la carpeta dist/ y ejecutar el API Node (PORT=4000 o el que definas).
+   - Configurar VITE_API_URL si el API está en otro dominio/puerto.
