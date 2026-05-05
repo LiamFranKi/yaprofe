@@ -61,28 +61,43 @@ function SingleUpload({ label, accept, currentUrl, onUpload, onRemove, preview =
     if (!file) return;
     setUploading(true);
     setError('');
-    const result = await onUpload(file);
-    if (!result) setError('Error al subir archivo');
-    setUploading(false);
-    if (inputRef.current) inputRef.current.value = '';
+    try {
+      const result = await onUpload(file);
+      if (!result) setError('Error al subir archivo');
+    } finally {
+      // Dejar que React aplique primero el setState del padre (avatar_url) antes de cerrar uploading;
+      // evita desincronizar el DOM si el árbol del formulario cambia en el mismo tick.
+      queueMicrotask(() => {
+        setUploading(false);
+        if (inputRef.current) inputRef.current.value = '';
+      });
+    }
   };
 
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</label>
 
-      {currentUrl && preview === 'image' && (
-        <div className={`relative mb-3 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 ${previewClass || 'h-40'}`}>
-          <img src={currentUrl} alt="" className="w-full h-full object-cover" />
-          {onRemove && (
-            <button
-              type="button"
-              onClick={onRemove}
-              className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+      {preview === 'image' && (
+        <div
+          className={`relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 ${previewClass || 'h-40'} ${
+            currentUrl ? 'mb-3' : 'hidden'
+          }`}
+        >
+          {currentUrl ? (
+            <>
+              <img src={currentUrl} alt="" className="w-full h-full object-cover" />
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </>
+          ) : null}
         </div>
       )}
 

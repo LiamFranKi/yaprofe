@@ -183,7 +183,6 @@ export default function ProfileEditPage({ onNavigate }: ProfileEditPageProps) {
             </div>
 
             <FileUpload
-              key={`avatar-${form.avatar_url || 'none'}`}
               label={lang === 'es' ? 'Foto de perfil' : 'Profile photo'}
               accept="image/jpeg,image/png,image/webp,image/gif"
               currentUrl={form.avatar_url || null}
@@ -196,7 +195,6 @@ export default function ProfileEditPage({ onNavigate }: ProfileEditPageProps) {
 
             {profile?.role === 'seller' && (
               <FileUpload
-                key={`banner-${form.banner_url || 'none'}`}
                 label={lang === 'es' ? 'Imagen de banner' : 'Banner image'}
                 accept="image/jpeg,image/png,image/webp"
                 currentUrl={form.banner_url || null}
