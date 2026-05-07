@@ -1,4 +1,6 @@
 import { getTransport } from './orderEmails.js';
+import { ctaButton, linkFallback, paragraphPlain, wrapTransactionalEmail } from './mailLayout.js';
+import { getPublicAppBaseUrl } from './publicUrl.js';
 
 /**
  * Envía el enlace para restablecer contraseña. Requiere SMTP_* y MAIL_FROM en .env.
@@ -20,14 +22,18 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
     `Si no solicitaste este cambio, ignora este mensaje.\n\n` +
     `— YaProFe\n`;
 
-  const html = `
-    <p>Hola,</p>
-    <p>Para crear una <strong>nueva contraseña</strong> en YaProFe, pulsa el botón o copia el enlace (válido <strong>1 hora</strong>):</p>
-    <p><a href="${resetLink.replace(/"/g, '&quot;')}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Restablecer contraseña</a></p>
-    <p style="word-break:break-all;font-size:12px;color:#64748b;">${resetLink.replace(/</g, '&lt;')}</p>
-    <p>Si no solicitaste este cambio, ignora este mensaje.</p>
-    <p>— YaProFe</p>
-  `;
+  const inner =
+    paragraphPlain('Recibimos una solicitud para restablecer la contraseña de tu cuenta en YaProFe.') +
+    paragraphPlain('El enlace caduca en 1 hora por seguridad.') +
+    ctaButton(resetLink, 'Crear nueva contraseña') +
+    paragraphPlain('Si el botón no funciona, copia esta URL en tu navegador:') +
+    linkFallback(resetLink);
+
+  const html = wrapTransactionalEmail({
+    title: 'Restablecer contraseña',
+    preheader: 'Enlace seguro para crear una nueva contraseña en YaProFe.',
+    innerHtml: inner,
+  });
 
   try {
     await transport.sendMail({ from, to, subject, text, html });
@@ -36,4 +42,9 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
     console.error('[passwordResetEmail]', e);
     throw e;
   }
+}
+
+export function buildPasswordResetLink(plainToken: string): string {
+  const base = getPublicAppBaseUrl();
+  return `${base}/?reset_token=${encodeURIComponent(plainToken)}`;
 }

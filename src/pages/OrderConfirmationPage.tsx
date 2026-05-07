@@ -11,6 +11,8 @@ export type OrderConfirmationNavParams = {
   confirmProductIds?: number[];
   /** Token de recuperación de contraseña (URL `?reset_token=`). */
   resetToken?: string;
+  /** Token de verificación de correo (URL `?verify_token=`). */
+  verifyToken?: string;
 };
 
 type OrderConfirmationPageProps = {

@@ -17,7 +17,8 @@ import {
 } from './auth.js';
 import { sanitizeProductDescription } from './sanitizeHtml.js';
 import { sendOrderPaidEmails, getTransport } from './orderEmails.js';
-import { sendPasswordResetEmail } from './passwordResetEmail.js';
+import { sendPasswordResetEmail, buildPasswordResetLink } from './passwordResetEmail.js';
+import { sendVerificationEmail, buildVerifyEmailLink } from './emailVerification.js';
 
 const uploadRoot = path.join(process.cwd(), 'uploads');
 
@@ -281,12 +282,14 @@ export function registerApiRoutes(app: Express): void {
       const r = role === 'seller' ? 'seller' : 'buyer';
       const id = newId();
       const ph = await hashPassword(password);
+      const registerHasSmtp = Boolean(getTransport());
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
+        const emailVerified = registerHasSmtp ? 0 : 1;
         await conn.execute(
-          'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
-          [id, email.toLowerCase().trim(), ph]
+          'INSERT INTO users (id, email, password_hash, email_verified) VALUES (?, ?, ?, ?)',
+          [id, email.toLowerCase().trim(), ph, emailVerified]
         );
         await conn.execute(
           `INSERT INTO profiles (id, display_name, role) VALUES (?, ?, ?)`,
@@ -304,7 +307,6 @@ export function registerApiRoutes(app: Express): void {
       } finally {
         conn.release();
       }
-      const token = signToken(id);
       const [prows] = await pool.execute<RowDataPacket[]>(
         'SELECT * FROM profiles WHERE id = ?',
         [id]
@@ -314,6 +316,41 @@ export function registerApiRoutes(app: Express): void {
         res.status(500).json({ error: 'No se pudo cargar el perfil recién creado' });
         return;
       }
+      if (registerHasSmtp) {
+        const plain = randomBytes(32).toString('hex');
+        const th = hashPasswordResetToken(plain);
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        await pool.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [id]);
+        await pool.execute(
+          'INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?,?,?)',
+          [id, th, expiresAt]
+        );
+        const verifyLink = buildVerifyEmailLink(plain);
+        try {
+          await sendVerificationEmail(email.toLowerCase().trim(), verifyLink);
+        } catch (e) {
+          console.error('[auth/register] envío verificación', e);
+          // Mantener la cuenta pendiente de verificación por seguridad.
+          // El usuario podrá usar "reenviar verificación" cuando SMTP esté correcto.
+          res.status(201).json({
+            needsVerification: true,
+            email: email.toLowerCase().trim(),
+            profile: profileRowToJson(inserted),
+            user: { id, email: email.toLowerCase().trim() },
+            verificationEmailSent: false,
+          });
+          return;
+        }
+        res.status(201).json({
+          needsVerification: true,
+          email: email.toLowerCase().trim(),
+          profile: profileRowToJson(inserted),
+          user: { id, email: email.toLowerCase().trim() },
+          verificationEmailSent: true,
+        });
+        return;
+      }
+      const token = signToken(id);
       res.json({
         token,
         profile: profileRowToJson(inserted),
@@ -337,12 +374,20 @@ export function registerApiRoutes(app: Express): void {
         return;
       }
       const [urows] = await pool.execute<RowDataPacket[]>(
-        'SELECT id, email, password_hash FROM users WHERE email = ?',
+        'SELECT id, email, password_hash, COALESCE(email_verified, 1) AS email_verified FROM users WHERE email = ?',
         [email.toLowerCase().trim()]
       );
       const u = urows[0];
       if (!u || !(await verifyPassword(password, u.password_hash as string))) {
         res.status(401).json({ error: 'Credenciales incorrectas' });
+        return;
+      }
+      if (Number((u as Record<string, unknown>).email_verified ?? 1) === 0) {
+        res.status(403).json({
+          error:
+            'Debes confirmar tu correo antes de iniciar sesión. Revisa tu bandeja (y spam) o solicita un nuevo enlace desde registro.',
+          code: 'EMAIL_NOT_VERIFIED',
+        });
         return;
       }
       const [prows] = await pool.execute<RowDataPacket[]>(
@@ -433,9 +478,7 @@ export function registerApiRoutes(app: Express): void {
           'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?,?,?)',
           [uid, th, expiresAt]
         );
-        const base = (process.env.PUBLIC_ORIGIN || process.env.APP_PUBLIC_URL || '').replace(/\/$/, '');
-        const publicBase = base || 'http://localhost:5173';
-        const resetLink = `${publicBase}/?reset_token=${plain}`;
+        const resetLink = buildPasswordResetLink(plain);
         try {
           await sendPasswordResetEmail(email, resetLink);
         } catch {
@@ -493,6 +536,85 @@ export function registerApiRoutes(app: Express): void {
     } catch (e) {
       console.error('[reset-password]', e);
       res.status(500).json({ error: 'Error al restablecer la contraseña' });
+    }
+  });
+
+  /** Confirma correo con token del enlace `/?verify_token=`. */
+  app.post('/api/auth/verify-email', async (req, res) => {
+    try {
+      const token = (req.body as { token?: string }).token?.trim();
+      if (!token || token.length < 32) {
+        res.status(400).json({ error: 'Token inválido' });
+        return;
+      }
+      const th = hashPasswordResetToken(token);
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT user_id FROM email_verification_tokens WHERE token_hash = ? AND expires_at > NOW(3)`,
+        [th]
+      );
+      const userId = rows[0]?.user_id as string | undefined;
+      if (!userId) {
+        res.status(400).json({
+          error: 'Enlace inválido o caducado. Solicita un nuevo correo de verificación.',
+        });
+        return;
+      }
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute('UPDATE users SET email_verified = 1 WHERE id = ?', [userId]);
+        await conn.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [userId]);
+        await conn.commit();
+      } catch (e) {
+        await conn.rollback();
+        throw e;
+      } finally {
+        conn.release();
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[verify-email]', e);
+      res.status(500).json({ error: 'Error al verificar el correo' });
+    }
+  });
+
+  /** Reenvía correo de verificación (misma respuesta genérica si no aplica). */
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    try {
+      const email = (req.body as { email?: string }).email?.toLowerCase().trim();
+      if (!email) {
+        res.status(400).json({ error: 'Email requerido' });
+        return;
+      }
+      const [urows] = await pool.execute<RowDataPacket[]>(
+        'SELECT id, COALESCE(email_verified, 1) AS email_verified FROM users WHERE email = ? LIMIT 1',
+        [email]
+      );
+      const uid = urows[0]?.id as string | undefined;
+      const verified = Number((urows[0] as Record<string, unknown> | undefined)?.email_verified ?? 1);
+      if (!uid || verified === 1 || !getTransport()) {
+        res.json({ ok: true });
+        return;
+      }
+      const plain = randomBytes(32).toString('hex');
+      const th = hashPasswordResetToken(plain);
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      await pool.execute('DELETE FROM email_verification_tokens WHERE user_id = ?', [uid]);
+      await pool.execute(
+        'INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES (?,?,?)',
+        [uid, th, expiresAt]
+      );
+      const verifyLink = buildVerifyEmailLink(plain);
+      try {
+        await sendVerificationEmail(email, verifyLink);
+      } catch (err) {
+        console.error('[resend-verification]', err);
+        await pool.execute('DELETE FROM email_verification_tokens WHERE user_id = ? AND token_hash = ?', [uid, th]);
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[resend-verification]', e);
+      res.status(500).json({ error: 'Error al reenviar verificación' });
     }
   });
 

@@ -19,7 +19,12 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, displayName: string, role: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string,
+    role: string
+  ) => Promise<{ error: Error | null; needsVerification?: boolean; email?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -85,9 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, displayName: string, role: string) => {
     try {
-      const { profile: p, user: u } = await authRegister(email, password, displayName, role);
-      setUser({ id: u.id, email: u.email });
-      setProfile(p);
+      const result = await authRegister(email, password, displayName, role);
+      if ('needsVerification' in result && result.needsVerification) {
+        return { error: null, needsVerification: true, email: result.email };
+      }
+      const r = result as { token: string; profile: Profile; user: { id: string; email: string } };
+      setUser({ id: r.user.id, email: r.user.email });
+      setProfile(r.profile);
       return { error: null };
     } catch (e) {
       return { error: toAuthError(e) };

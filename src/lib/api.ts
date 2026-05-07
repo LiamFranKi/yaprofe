@@ -190,26 +190,63 @@ function normalizeProfile(raw: unknown): Profile {
   };
 }
 
+export type AuthRegisterResult =
+  | { needsVerification: true; email: string; profile: Profile; user: { id: string; email: string } }
+  | {
+      needsVerification?: false;
+      token: string;
+      profile: Profile;
+      user: { id: string; email: string };
+      verificationSkipped?: boolean;
+    };
+
 export async function authRegister(
   email: string,
   password: string,
   displayName: string,
   role: string
-): Promise<{ token: string; profile: Profile; user: { id: string; email: string } }> {
+): Promise<AuthRegisterResult> {
   const data = await apiRequest<{
-    token: string;
+    token?: string;
+    needsVerification?: boolean;
+    verificationSkipped?: boolean;
     profile: Record<string, unknown>;
     user: { id: string; email: string };
   }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password, displayName, role }),
   });
-  if (!data?.token || typeof data.token !== 'string' || !data?.user) {
+  if (!data?.user) {
     throw new Error('Respuesta inválida del servidor al registrarse.');
   }
   const profile = normalizeProfile(data.profile);
+  if (data.needsVerification) {
+    return {
+      needsVerification: true,
+      email: data.user.email,
+      profile,
+      user: data.user,
+    };
+  }
+  if (!data?.token || typeof data.token !== 'string') {
+    throw new Error('Respuesta inválida del servidor al registrarse.');
+  }
   setToken(data.token);
-  return { token: data.token, profile, user: data.user };
+  return { token: data.token, profile, user: data.user, verificationSkipped: data.verificationSkipped };
+}
+
+export async function verifyEmailWithToken(token: string): Promise<void> {
+  await apiRequest('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function resendVerificationEmail(email: string): Promise<void> {
+  await apiRequest('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }
 
 export async function authLogin(

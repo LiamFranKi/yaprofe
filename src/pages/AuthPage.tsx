@@ -3,7 +3,7 @@ import { Eye, EyeOff, Loader2, ArrowLeft, X, KeyRound } from 'lucide-react';
 import YaProFeLogo from '../components/YaProFeLogo';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
-import { requestPasswordReset } from '../lib/api';
+import { requestPasswordReset, resendVerificationEmail } from '../lib/api';
 import type { OrderConfirmationNavParams } from './OrderConfirmationPage';
 
 interface AuthPageProps {
@@ -46,8 +46,18 @@ export default function AuthPage({ mode, onNavigate }: AuthPageProps) {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotError, setForgotError] = useState('');
+  const [verifyPending, setVerifyPending] = useState(false);
+  const [verifyResent, setVerifyResent] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   const hero = mode === 'login' ? AUTH_HERO.login : AUTH_HERO.register;
+
+  useEffect(() => {
+    if (mode !== 'register') {
+      setVerifyPending(false);
+      setVerifyResent(false);
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (forgotOpen) {
@@ -75,15 +85,33 @@ export default function AuthPage({ mode, onNavigate }: AuthPageProps) {
         setLoading(false);
         return;
       }
-      const { error } = await signUp(form.email, form.password, form.name, form.role);
+      const { error, needsVerification } = await signUp(form.email, form.password, form.name, form.role);
       if (error) {
         setError(formatAuthErr(error, lang));
+      } else if (needsVerification) {
+        setVerifyPending(true);
+        setVerifyResent(false);
       } else {
         onNavigate(form.role === 'seller' ? 'dashboard' : 'marketplace');
       }
     }
 
     setLoading(false);
+  };
+
+  const handleResendVerify = async () => {
+    const em = form.email.trim().toLowerCase();
+    if (!em) return;
+    setResendLoading(true);
+    setError('');
+    try {
+      await resendVerificationEmail(em);
+      setError('');
+      setVerifyResent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
+    }
+    setResendLoading(false);
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
@@ -197,6 +225,54 @@ export default function AuthPage({ mode, onNavigate }: AuthPageProps) {
             {mode === 'login' ? t('auth.login.subtitle') : t('auth.register.subtitle')}
           </p>
 
+          {mode === 'register' && verifyPending ? (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/90 dark:bg-emerald-950/40 p-6 space-y-4">
+              <p className="text-sm text-emerald-900 dark:text-emerald-100 leading-relaxed">
+                {lang === 'es' ? (
+                  <>
+                    Te enviamos un enlace de verificación a <strong>{form.email}</strong>. Ábrelo para activar tu cuenta
+                    (revisa spam).
+                  </>
+                ) : (
+                  <>
+                    We sent a verification link to <strong>{form.email}</strong>. Open it to activate your account (check
+                    spam).
+                  </>
+                )}
+              </p>
+              {verifyResent && (
+                <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                  {lang === 'es'
+                    ? 'Si la cuenta existe y aún no está verificada, te enviamos otro enlace.'
+                    : 'If the account exists and is still unverified, another link was sent.'}
+                </p>
+              )}
+              {error && (
+                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl px-3 py-2">
+                  {error}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleResendVerify}
+                disabled={resendLoading}
+                className="w-full py-3 rounded-xl border-2 border-emerald-600 text-emerald-900 dark:text-emerald-100 font-semibold hover:bg-emerald-100/50 dark:hover:bg-emerald-900/40 disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {lang === 'es' ? 'Reenviar correo de verificación' : 'Resend verification email'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVerifyPending(false);
+                  onNavigate('login');
+                }}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                {lang === 'es' ? 'Ir a iniciar sesión' : 'Go to sign in'}
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             {mode === 'register' && (
               <div>
@@ -319,6 +395,7 @@ export default function AuthPage({ mode, onNavigate }: AuthPageProps) {
               {mode === 'login' ? t('auth.login.btn') : t('auth.register.btn')}
             </button>
           </form>
+          )}
 
           <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-8">
             {mode === 'login' ? t('auth.login.noAccount') : t('auth.register.hasAccount')}{' '}

@@ -20,6 +20,7 @@ import ProductDetailPage from './pages/ProductDetailPage';
 import CartPage from './pages/CartPage';
 import OrderConfirmationPage from './pages/OrderConfirmationPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import type { OrderConfirmationNavParams } from './pages/OrderConfirmationPage';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 
@@ -30,6 +31,7 @@ export type Page =
   | 'login'
   | 'register'
   | 'reset-password'
+  | 'verify-email'
   | 'seller-profile'
   | 'product-detail'
   | 'dashboard'
@@ -46,6 +48,7 @@ const PAGES_WITHOUT_FOOTER: Page[] = [
   'login',
   'register',
   'reset-password',
+  'verify-email',
   'dashboard',
   'buyer-dashboard',
   'profile-edit',
@@ -60,9 +63,15 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [navParams, setNavParams] = useState<NavParams>({});
 
-  /** Enlaces: `/?reset_token=…`, `/?order=…`, `/?seller=<uuid>`, `/?product=<id>`. */
+  /** Enlaces: `/?verify_token=…`, `/?reset_token=…`, `/?order=…`, `/?seller=<uuid>`, `/?product=<id>`. */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const verifyTok = params.get('verify_token');
+    if (verifyTok && verifyTok.length >= 32) {
+      setCurrentPage('verify-email');
+      setNavParams({ verifyToken: verifyTok });
+      return;
+    }
     const resetTok = params.get('reset_token');
     if (resetTok && resetTok.length >= 32) {
       setCurrentPage('reset-password');
@@ -131,6 +140,13 @@ function AppContent() {
       window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
       return;
     }
+    if (page === 'verify-email' && params?.verifyToken) {
+      url.search = '';
+      url.searchParams.set('verify_token', params.verifyToken);
+      window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
+      return;
+    }
+    url.searchParams.delete('verify_token');
     url.searchParams.delete('reset_token');
     url.searchParams.delete('order');
     url.searchParams.delete('order_status');
@@ -160,6 +176,9 @@ function AppContent() {
           {currentPage === 'register' && <AuthPage mode="register" onNavigate={navigate} />}
           {currentPage === 'reset-password' && (
             <ResetPasswordPage token={navParams.resetToken} onNavigate={navigate} />
+          )}
+          {currentPage === 'verify-email' && (
+            <VerifyEmailPage token={navParams.verifyToken} onNavigate={navigate} />
           )}
           {currentPage === 'seller-profile' && (
             <SellerProfilePage sellerId={navParams.sellerId} onNavigate={navigate} />
