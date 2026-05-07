@@ -19,6 +19,8 @@ export function wrapTransactionalEmail(opts: {
 }): string {
   const title = escapeHtml(opts.title);
   const pre = escapeHtml(opts.preheader);
+  const base = (process.env.APP_PUBLIC_URL || process.env.PUBLIC_ORIGIN || 'https://yaprofe.com').replace(/\/$/, '');
+  const logoUrl = escapeHtml(`${base}/logoyaprofe.png`);
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -26,15 +28,15 @@ export function wrapTransactionalEmail(opts: {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#eef4ff;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
   <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;">${pre}</span>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f172a;padding:24px 12px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4ff;padding:28px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dbeafe;box-shadow:0 8px 24px rgba(59,130,246,0.12);">
           <tr>
-            <td style="background:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);padding:28px 24px;text-align:center;">
-              <div style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;">YaProFe</div>
+            <td style="background:linear-gradient(135deg,#2563eb 0%,#06b6d4 100%);padding:22px 24px;text-align:center;">
+              <img src="${logoUrl}" alt="YaProFe" height="40" style="display:block;margin:0 auto;max-width:220px;height:40px;width:auto;" />
               <div style="font-size:13px;color:rgba(255,255,255,0.9);margin-top:6px;">Marketplace educativo</div>
             </td>
           </tr>
@@ -45,12 +47,17 @@ export function wrapTransactionalEmail(opts: {
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 24px 28px 24px;font-size:12px;line-height:1.5;color:#64748b;">
+            <td style="padding:8px 24px 16px 24px;font-size:12px;line-height:1.5;color:#64748b;">
               Si no esperabas este mensaje, puedes ignorarlo con tranquilidad.
             </td>
           </tr>
+          <tr>
+            <td style="padding:0 24px 24px 24px;text-align:center;">
+              <img src="${logoUrl}" alt="YaProFe" height="28" style="display:inline-block;opacity:0.85;height:28px;width:auto;" />
+            </td>
+          </tr>
         </table>
-        <p style="margin:20px 0 0 0;font-size:11px;color:#94a3b8;">© YaProFe</p>
+        <p style="margin:16px 0 0 0;font-size:11px;color:#94a3b8;">© YaProFe</p>
       </td>
     </tr>
   </table>

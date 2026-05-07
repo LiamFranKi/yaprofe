@@ -326,27 +326,16 @@ export function registerApiRoutes(app: Express): void {
           [id, th, expiresAt]
         );
         const verifyLink = buildVerifyEmailLink(plain);
-        try {
-          await sendVerificationEmail(email.toLowerCase().trim(), verifyLink);
-        } catch (e) {
-          console.error('[auth/register] envío verificación', e);
-          // Mantener la cuenta pendiente de verificación por seguridad.
-          // El usuario podrá usar "reenviar verificación" cuando SMTP esté correcto.
-          res.status(201).json({
-            needsVerification: true,
-            email: email.toLowerCase().trim(),
-            profile: profileRowToJson(inserted),
-            user: { id, email: email.toLowerCase().trim() },
-            verificationEmailSent: false,
-          });
-          return;
-        }
+        // Enviar correo en segundo plano para no frenar la respuesta del registro.
+        void sendVerificationEmail(email.toLowerCase().trim(), verifyLink).catch(e => {
+          console.error('[auth/register] envío verificación (background)', e);
+        });
         res.status(201).json({
           needsVerification: true,
           email: email.toLowerCase().trim(),
           profile: profileRowToJson(inserted),
           user: { id, email: email.toLowerCase().trim() },
-          verificationEmailSent: true,
+          verificationEmailQueued: true,
         });
         return;
       }
